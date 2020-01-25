@@ -23,17 +23,25 @@ public class LSLServer : MonoBehaviour
     };
     //put all the objects to stream here. The server owns all the objects, each client owns the head/hands.
     //one head and two hands hacked in
-    [Header("head and two hands to coordinate")]
+    [Header("server coordinates these objects")]
     public List<streamData> objectsToStream;
-    public Transform head;
-    public Transform leftHand;
-    public Transform rightHand;
 
     [Header("Only 1 server on the network")]
     public bool isServer = false;
 
+    [Header("head and two hands to coordinate")]
+    public Transform head;
+    public Transform leftHand;
+    public Transform rightHand;
+
     [Header("Safe after a few seconds.")]
     public bool isStreaming = false;
+
+    [Header("Render clients as these.")]
+    public List<GameObject> headRendersObjects;
+    public List<GameObject> leftHandRendersObjects;
+    public List<GameObject> rightHandRendersObjects;
+    private int lastRenderedClient = 0;
 
     //make this unique to the device (Unity's dev id is ok, or ip address might work)
     //set first thing in start.
@@ -47,28 +55,57 @@ public class LSLServer : MonoBehaviour
     liblsl.StreamInlet lslObjectInlet;
 
     //head/hand streams have the following ID and their source looks like <objectIdentifier><streamName>
+    //hackish if someone with more than two hands or one head shows up
     private string headStreamID = "head_pos_rot_scale";
     private string headIdentifier = "head_";
     liblsl.StreamInfo lslHeadInfo;
     liblsl.StreamOutlet lslHeadOutlet;
     List<liblsl.StreamInlet> lslHeadInlet = new List<liblsl.StreamInlet>();
-    private string handStreamID = "hand_pos_rot_scale";
-    private string handIdentifier = "hand_";
-    liblsl.StreamInfo lslHandInfo;
-    liblsl.StreamOutlet lslHandOutlet;
-    List<liblsl.StreamInlet> lslHandInlet = new List<liblsl.StreamInlet>();
+
+    private string leftHandStreamID = "left_hand_pos_rot_scale";
+    private string leftHandIdentifier = "left_hand_";
+    liblsl.StreamInfo lslLeftHandInfo;
+    liblsl.StreamOutlet lslLeftHandOutlet;
+    List<liblsl.StreamInlet> lslLeftHandInlet = new List<liblsl.StreamInlet>();
+
+    private string rightHandStreamID = "right_hand_pos_rot_scale";
+    private string rightHandIdentifier = "right_hand_";
+    liblsl.StreamInfo lslRightHandInfo;
+    liblsl.StreamOutlet lslRightHandOutlet;
+    List<liblsl.StreamInlet> lslRightHandInlet = new List<liblsl.StreamInlet>();
+
+    private Dictionary<string, GameObject> heads = new Dictionary<string, GameObject>();
+    private Dictionary<string, GameObject> leftHands = new Dictionary<string, GameObject>();
+    private Dictionary<string, GameObject> rightHands = new Dictionary<string, GameObject>();
 
     //max number of objects read each frame. may tweak lower.
     private int maxBufLen = 100;
 
     private int objectDataSize = 10;
+    private int headhandDataSize = 6;
+
     // Start is called before the first frame update
     void Start()
     {
         id = SystemInfo.deviceUniqueIdentifier;
-        lslHeadInfo = new liblsl.StreamInfo("StreamObject", headStreamID, objectDataSize, 0,
+        objectBuffer = new float[objectDataSize];
+        headhandBuffer = new float[headhandDataSize];
+
+        //only needed for testing on single device (same server and client)
+        string letters = "qwertyuiopasdfghjklzxcvbnm";
+        for(int i = 0; i < 10; ++ i) { id += letters[Random.Range(0, letters.Length)]; }
+
+        lslHeadInfo = new liblsl.StreamInfo("StreamObject", headStreamID, headhandDataSize, 0,
             liblsl.channel_format_t.cf_float32, headIdentifier + id);
-        lslHeadOutlet = new liblsl.StreamOutlet(lslHeadInfo);
+        lslHeadOutlet = new liblsl.StreamOutlet(lslHeadInfo, 0, maxBufLen);
+        lslLeftHandInfo = new liblsl.StreamInfo("StreamObject", leftHandStreamID, headhandDataSize, 0,
+            liblsl.channel_format_t.cf_float32, leftHandIdentifier + id);
+        lslLeftHandOutlet = new liblsl.StreamOutlet(lslLeftHandInfo, 0, maxBufLen);
+        lslRightHandInfo = new liblsl.StreamInfo("StreamObject", rightHandStreamID, headhandDataSize, 0,
+            liblsl.channel_format_t.cf_float32, rightHandIdentifier + id);
+        lslRightHandOutlet = new liblsl.StreamOutlet(lslRightHandInfo, 0, maxBufLen);
+
+        StartCoroutine(HandleEyeHandSamples());
     }
 
     private Coroutine clientReader = null;
@@ -127,6 +164,58 @@ public class LSLServer : MonoBehaviour
         yield return null;
     }
 
+
+    public IEnumerator HandleEyeHandSamples()
+    {
+        //mostly for luck
+        yield return new WaitForSeconds(1);
+        float[] buffer = new float[headhandDataSize];
+        Vector3 pos = new Vector3();
+        Quaternion q = new Quaternion();
+        Vector3 rot = new Vector3();
+        double t = 0;
+        while (true)
+        {
+            //usual hack here for two hands and one head (venusians can write their own VR:)
+            //non-blocking, but clear everything each frame
+            //set maxBufLen to decrease total allowed to be in pull_sample. 
+            foreach (var h in lslHeadInlet)
+            {
+                t = h.pull_sample(buffer, 0.0);
+                if (t > 0)
+                {
+                    pos.Set(buffer[0], buffer[1], buffer[2]);
+                    rot.Set(buffer[3], buffer[4], buffer[5]);
+                    q.eulerAngles = rot;
+                    heads[h.info().source_id()].transform.SetPositionAndRotation(pos, q);
+                }
+            }
+            foreach (var h in lslLeftHandInlet)
+            {
+                t = h.pull_sample(buffer, 0.0);
+                if (t > 0)
+                {
+                    pos.Set(buffer[0], buffer[1], buffer[2]);
+                    rot.Set(buffer[3], buffer[4], buffer[5]);
+                    q.eulerAngles = rot;
+                    leftHands[h.info().source_id()].transform.SetPositionAndRotation(pos, q);
+                }
+            }
+            foreach (var h in lslRightHandInlet)
+            {
+                t = h.pull_sample(buffer, 0.0);
+                if (t > 0)
+                {
+                    pos.Set(buffer[0], buffer[1], buffer[2]);
+                    rot.Set(buffer[3], buffer[4], buffer[5]);
+                    q.eulerAngles = rot;
+                    rightHands[h.info().source_id()].transform.SetPositionAndRotation(pos, q);
+                }
+            }
+            yield return null;
+        }
+    }
+
     /// <summary>
     /// Add streaming objects at run time.
     /// TODO: This is trickier than it looks. 
@@ -155,7 +244,7 @@ public class LSLServer : MonoBehaviour
             //this stream will have all the objects that are enabled to stream.
             lslObjectInfo = new liblsl.StreamInfo("StreamObjects", objectStreamID, objectDataSize, 0,
                 liblsl.channel_format_t.cf_float32, objectIdentifier + id);
-            lslObjectOutlet = new liblsl.StreamOutlet(lslObjectInfo);
+            lslObjectOutlet = new liblsl.StreamOutlet(lslObjectInfo, 0, maxBufLen);
             Debug.Log("started stream: " + lslObjectOutlet.info().source_id());
         }
     }
@@ -171,6 +260,75 @@ public class LSLServer : MonoBehaviour
     }
 
     private double streamSearchTime = 1.0;//s
+
+    /// <summary>
+    /// Scan for players, each of which should be sending data from VR tracking.
+    /// Does not include itself or anyone already added.
+    /// </summary>
+    public void ScanForPlayers()
+    {
+        Debug.Log("Searching for players.");
+        liblsl.StreamInfo[] allInlets = liblsl.resolve_streams(streamSearchTime);
+        Debug.Log("Done searching for players. Found " + allInlets.Length + " streams.");
+        foreach (var s in allInlets)
+        {
+            string streamType = s.type();
+            string streamSourceId = s.source_id();
+            Debug.Log("   stream id: " + streamSourceId);
+            if (!IsMe(streamSourceId) && !AlreadyFoundPlayer(streamSourceId))
+            {
+                if (streamSourceId.StartsWith(headIdentifier))
+                {
+                    lslHeadInlet.Add(new liblsl.StreamInlet(s));
+                    heads.Add(streamSourceId, Instantiate(headRendersObjects[lastRenderedClient % headRendersObjects.Count]));
+                } else if (streamSourceId.StartsWith(leftHandIdentifier))
+                {
+                    lslLeftHandInlet.Add(new liblsl.StreamInlet(s));
+                    leftHands.Add(streamSourceId, Instantiate(leftHandRendersObjects[lastRenderedClient % leftHandRendersObjects.Count]));
+                }
+                else if (streamSourceId.StartsWith(rightHandIdentifier))
+                {
+                    lslRightHandInlet.Add(new liblsl.StreamInlet(s));
+                    rightHands.Add(streamSourceId, Instantiate(rightHandRendersObjects[lastRenderedClient % rightHandRendersObjects.Count]));
+                }
+                //Just want to cycle through them randomly-ish
+                ++lastRenderedClient;
+            }
+        }
+    }
+
+    private bool IsMe(string s)
+    {
+        return s.EndsWith(id);
+    } 
+
+    /// <summary>
+    /// check each of heads and hands. Not real fast, or meant to be called often.
+    /// </summary>
+    /// <param name="s"></param>
+    /// <returns></returns>
+    private bool AlreadyFoundPlayer(string s)
+    {
+        foreach (var inlet in lslHeadInlet)
+        {
+            if (inlet.info().source_id() == s) { return true; }
+        }
+        foreach (var inlet in lslLeftHandInlet)
+        {
+            if (inlet.info().source_id() == s) { return true; }
+        }
+        foreach (var inlet in lslRightHandInlet)
+        {
+            if (inlet.info().source_id() == s) { return true; }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// On the client: scan for an object stream coming from the server.
+    /// Not real safe to call this multiple times.
+    /// Server crash is probably bad.
+    /// </summary>
     void ScanForObjectStream()
     {
         if(isServer)
@@ -186,14 +344,16 @@ public class LSLServer : MonoBehaviour
             string streamType = s.type();
             string streamSourceId = s.source_id();
             Debug.Log("   stream id: " + streamSourceId);
-            if (streamSourceId.StartsWith("object_"))
+            if (streamSourceId.StartsWith(objectIdentifier))
             {
                 lslObjectInlet = new liblsl.StreamInlet(s);
             }
         }
     }
 
-    private float[] objectBuffer = new float[10];
+
+    private float[] objectBuffer;
+    private float[] headhandBuffer;
     void Update()
     {
         if (isStreaming)
@@ -217,6 +377,38 @@ public class LSLServer : MonoBehaviour
                     //Debug.Log("gh1");
                 }
                 ++i;
+            }
+
+            //clients stream/own their heads and hands (hackish, but 6dof and 1head/2hands is not too bad).
+            if (head != null)
+            {
+                headhandBuffer[0] = head.position.x;
+                headhandBuffer[1] = head.position.y;
+                headhandBuffer[2] = head.position.z;
+                headhandBuffer[3] = head.eulerAngles.x;
+                headhandBuffer[4] = head.eulerAngles.y;
+                headhandBuffer[5] = head.eulerAngles.z;
+                lslHeadOutlet.push_sample(headhandBuffer);
+            }
+            if (leftHand != null)
+            {
+                headhandBuffer[0] = leftHand.position.x;
+                headhandBuffer[1] = leftHand.position.y;
+                headhandBuffer[2] = leftHand.position.z;
+                headhandBuffer[3] = leftHand.eulerAngles.x;
+                headhandBuffer[4] = leftHand.eulerAngles.y;
+                headhandBuffer[5] = leftHand.eulerAngles.z;
+                lslLeftHandOutlet.push_sample(headhandBuffer);
+            }
+            if (rightHand != null)
+            {
+                headhandBuffer[0] = rightHand.position.x;
+                headhandBuffer[1] = rightHand.position.y;
+                headhandBuffer[2] = rightHand.position.z;
+                headhandBuffer[3] = rightHand.eulerAngles.x;
+                headhandBuffer[4] = rightHand.eulerAngles.y;
+                headhandBuffer[5] = rightHand.eulerAngles.z;
+                lslRightHandOutlet.push_sample(headhandBuffer);
             }
         }
     }
