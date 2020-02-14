@@ -20,6 +20,12 @@ public class LSLServer : MonoBehaviour
         public GameObject gameObject;
         //index into streamableObjects, no checking
         public int type;
+
+        public streamData(GameObject o, int t)
+        {
+            gameObject = o;
+            type = t;
+        }
     };
     //put all the objects to stream here. The server owns all the objects, each client owns the head/hands.
     //one head and two hands hacked in
@@ -84,9 +90,19 @@ public class LSLServer : MonoBehaviour
     private int objectDataSize = 10;
     private int headhandDataSize = 6;
 
+    public GameObject testCube;
+
     // Start is called before the first frame update
     void Start()
     {
+        objectsToStream = new List<streamData>();
+        int testSize = 100;
+        for(int i = 0; i < testSize; ++i)
+        {
+            var ins = Instantiate(testCube, 100.0f*Random.insideUnitSphere, Random.rotationUniform);
+            objectsToStream.Add(new streamData(ins, i));
+        }
+
         id = SystemInfo.deviceUniqueIdentifier;
         objectBuffer = new float[objectDataSize];
         headhandBuffer = new float[headhandDataSize];
@@ -151,13 +167,14 @@ public class LSLServer : MonoBehaviour
             //non-blocking, but clear everything each frame
             //set maxBufLen to decrease total allowed to be in pull_sample. 
             t = lslObjectInlet.pull_sample(buffer, 0.0);
-            if (t > 0)
+            while (t > 0)
             {
                 pos.Set(buffer[1], buffer[2], buffer[3]);
                 rot.Set(buffer[4], buffer[5], buffer[6]);
                 q.eulerAngles = rot;
                 scale.Set(buffer[7], buffer[8], buffer[9]);
                 objectsToStream[(int)(buffer[0] + 0.5f)].gameObject.transform.SetPositionAndRotation(pos, q);
+                t = lslObjectInlet.pull_sample(buffer, 0.0);
             }
             yield return null;
         }
@@ -182,34 +199,37 @@ public class LSLServer : MonoBehaviour
             foreach (var h in lslHeadInlet)
             {
                 t = h.pull_sample(buffer, 0.0);
-                if (t > 0)
+                while (t > 0)
                 {
                     pos.Set(buffer[0], buffer[1], buffer[2]);
                     rot.Set(buffer[3], buffer[4], buffer[5]);
                     q.eulerAngles = rot;
                     heads[h.info().source_id()].transform.SetPositionAndRotation(pos, q);
+                    t = h.pull_sample(buffer, 0.0);
                 }
             }
             foreach (var h in lslLeftHandInlet)
             {
                 t = h.pull_sample(buffer, 0.0);
-                if (t > 0)
+                while (t > 0)
                 {
                     pos.Set(buffer[0], buffer[1], buffer[2]);
                     rot.Set(buffer[3], buffer[4], buffer[5]);
                     q.eulerAngles = rot;
                     leftHands[h.info().source_id()].transform.SetPositionAndRotation(pos, q);
+                    t = h.pull_sample(buffer, 0.0);
                 }
             }
             foreach (var h in lslRightHandInlet)
             {
                 t = h.pull_sample(buffer, 0.0);
-                if (t > 0)
+                while (t > 0)
                 {
                     pos.Set(buffer[0], buffer[1], buffer[2]);
                     rot.Set(buffer[3], buffer[4], buffer[5]);
                     q.eulerAngles = rot;
                     rightHands[h.info().source_id()].transform.SetPositionAndRotation(pos, q);
+                    t = h.pull_sample(buffer, 0.0);
                 }
             }
             yield return null;

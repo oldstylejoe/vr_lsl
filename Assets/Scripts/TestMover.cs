@@ -15,8 +15,6 @@ public class TestMover : MonoBehaviour
 
     private void Update()
     {
-        if (lsl.isServer)
-        {
             if (Input.GetKeyDown(KeyCode.UpArrow))
             {
                 var p = gameObject.transform.position;
@@ -29,7 +27,6 @@ public class TestMover : MonoBehaviour
                 p.y -= 0.1f;
                 gameObject.transform.position = p;
             }
-        }
     }
 
 }
