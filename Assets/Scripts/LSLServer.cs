@@ -96,7 +96,7 @@ public class LSLServer : MonoBehaviour
     void Start()
     {
         objectsToStream = new List<streamData>();
-        int testSize = 100;
+        int testSize = 1000;
         for(int i = 0; i < testSize; ++i)
         {
             var ins = Instantiate(testCube, 100.0f*Random.insideUnitSphere, Random.rotationUniform);

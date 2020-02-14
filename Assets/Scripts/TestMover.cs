@@ -15,6 +15,7 @@ public class TestMover : MonoBehaviour
 
     private void Update()
     {
+
             if (Input.GetKeyDown(KeyCode.UpArrow))
             {
                 var p = gameObject.transform.position;
