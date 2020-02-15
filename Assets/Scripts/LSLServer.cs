@@ -111,13 +111,13 @@ public class LSLServer : MonoBehaviour
         string letters = "qwertyuiopasdfghjklzxcvbnm";
         for(int i = 0; i < 10; ++ i) { id += letters[Random.Range(0, letters.Length)]; }
 
-        lslHeadInfo = new liblsl.StreamInfo("StreamObject", headStreamID, headhandDataSize, 0,
+        lslHeadInfo = new liblsl.StreamInfo("StreamHead", headStreamID, headhandDataSize, 0,
             liblsl.channel_format_t.cf_float32, headIdentifier + id);
         lslHeadOutlet = new liblsl.StreamOutlet(lslHeadInfo, 0, maxBufLen);
-        lslLeftHandInfo = new liblsl.StreamInfo("StreamObject", leftHandStreamID, headhandDataSize, 0,
+        lslLeftHandInfo = new liblsl.StreamInfo("StreamLeftHand", leftHandStreamID, headhandDataSize, 0,
             liblsl.channel_format_t.cf_float32, leftHandIdentifier + id);
         lslLeftHandOutlet = new liblsl.StreamOutlet(lslLeftHandInfo, 0, maxBufLen);
-        lslRightHandInfo = new liblsl.StreamInfo("StreamObject", rightHandStreamID, headhandDataSize, 0,
+        lslRightHandInfo = new liblsl.StreamInfo("StreamRightHand", rightHandStreamID, headhandDataSize, 0,
             liblsl.channel_format_t.cf_float32, rightHandIdentifier + id);
         lslRightHandOutlet = new liblsl.StreamOutlet(lslRightHandInfo, 0, maxBufLen);
 
